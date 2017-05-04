@@ -9,6 +9,13 @@ import android.view.View;
 import android.view.Window;
 import android.widget.*;
 
+import com.example.vuquang.goncheck.DAO.CheckedPlaceDAO;
+import com.example.vuquang.goncheck.model.CheckedPlace;
+import com.google.android.gms.location.places.Place;
+
+import java.util.ArrayList;
+import java.util.List;
+
 public class MainActivity extends AppCompatActivity implements View.OnClickListener{
     TextView tx;
     Button btnLogin;
@@ -36,6 +43,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public void onClick(View v) {
         googleMapAct();
+
     }
 
 

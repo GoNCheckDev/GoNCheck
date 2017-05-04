@@ -6,24 +6,24 @@
     <item
         android:id="@+id/action_search"
         android:icon="@drawable/ic_action_search"
-        android:orderInCategory="100"
-        app:showAsAction="always|withText"
-        android:title="Search"/>
+        android:orderInCategory="1"
+        android:title="Search"
+        app:showAsAction="always" />
     <item android:id="@+id/spinner"
         app:showAsAction="always"
         app:actionViewClass="android.widget.Spinner"
-        android:orderInCategory="120"
+        android:orderInCategory="2"
         android:title="spinner"/>
     <item
         android:id="@+id/action_share"
-        android:icon="@drawable/ic_action_share"
-        android:orderInCategory="140"
+        android:icon="@drawable/ic_action_directions"
+        android:orderInCategory="3"
         app:showAsAction="always"
         android:title="Share"/>
     <item
         android:id="@+id/action_camera"
         android:icon="@drawable/ic_action_camera"
-        android:orderInCategory="160"
+        android:orderInCategory="4"
         app:showAsAction="always"
         android:title="Camera"/>
 </menu>

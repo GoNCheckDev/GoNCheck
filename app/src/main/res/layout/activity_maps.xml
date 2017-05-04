@@ -33,12 +33,12 @@ sothree:umanoScrollableView="@+id/list">
         android:layout_height="match_parent"
         tools:context="com.example.vuquang.goncheck.MapsActivity" />
 
-    <Button
-        android:id="@+id/btnLocation"
-        android:layout_margin="10dp"
-        android:layout_width="57dp"
-        android:layout_height="wrap_content"
-        android:background="@mipmap/ic_btn_location"/>
+    <!--<Button-->
+        <!--android:id="@+id/btnLocation"-->
+        <!--android:layout_margin="10dp"-->
+        <!--android:layout_width="57dp"-->
+        <!--android:layout_height="wrap_content"-->
+        <!--android:background="@mipmap/ic_btn_location"/>-->
 </FrameLayout>
 
 <!-- SLIDING LAYOUT -->
