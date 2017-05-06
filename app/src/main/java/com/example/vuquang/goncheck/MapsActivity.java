@@ -6,7 +6,6 @@ import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.res.Resources;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
@@ -15,12 +14,9 @@ import android.location.Geocoder;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.net.Uri;
-import android.os.Environment;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.provider.MediaStore;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.view.MenuItemCompat;
@@ -61,11 +57,8 @@ import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 
-import java.io.File;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -73,18 +66,12 @@ import io.realm.Realm;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,DirectionCallback{
     private static final String TAG = "DemoActivity";
-    private static final int CAMERA_REQUEST = 1888;
     private static final int PLACE_AUTOCOMPLETE_REQUEST_CODE = 1889;
+    private static final int CAMERA_REQUEST = 1888;
     private static final int S_WIDTH = 120;
     private static final int S_HEIGHT = 120;
     private static final int B_WIDTH = 600;
     private static final int B_HEIGHT = 600;
-
-    public static final String pathAlbum = Environment.getExternalStoragePublicDirectory(
-            Environment.DIRECTORY_PICTURES) + "/" + "GoNCheck/";
-    private String mCurrentPhotoPath;
-    private static final String JPEG_FILE_PREFIX = "IMG_";
-    private static final String JPEG_FILE_SUFFIX = ".jpg";
 
     public static final int LOCATION_UPDATE_MIN_DISTANCE = 10;
     public static final int LOCATION_UPDATE_MIN_TIME = 5000;
@@ -103,7 +90,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     //save current place
     String curPlace;
     Address curAddr;
-
     //Manage Db
     CheckedPlaceDAO checkedPlaceDAO;
 
@@ -113,6 +99,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     ImageView imageSelected;
     //Small image
     Bitmap[] thumbnails = null;
+    CameraAction cameraAction;
 
     //Direction
     private LatLng origin;
@@ -123,7 +110,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         @Override
         public void handleMessage(Message msg) {
             Object returnedValue = msg. obj;
-
             if(returnedValue instanceof CheckedPlace) {
                 markLocation((CheckedPlace)returnedValue);
             }
@@ -132,12 +118,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private final LocationListener locationListener = new LocationListener() {
         public void onLocationChanged(Location location) {
-            //updateMyCurrentLoc(location);
             locationManager.removeUpdates(locationListener);
         }
 
         public void onProviderDisabled(String provider){
-            //updateMyCurrentLoc(null);
             locationManager.removeUpdates(locationListener);
         }
 
@@ -159,6 +143,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         //Create realm db
         Realm.init(this);
         checkedPlaceDAO = new CheckedPlaceDAO();
+        cameraAction = new CameraAction(curPlace,curAddr,checkedPlaceDAO);
 
         //Add PlaceAutoComplete
         PlaceAutocompleteFragment autocompleteFragment = (PlaceAutocompleteFragment)
@@ -412,13 +397,17 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == CAMERA_REQUEST && resultCode == Activity.RESULT_OK) {
-            handleBigCameraPhoto();
-            loadListPlaceMarked();
-//            loadPic(checkedPlaceDAO.getCheckedPlace(curPlace).getId());
-//            textNamePlace.setText(curPlace.toString());
+        if (requestCode == CAMERA_REQUEST) {
+            if(resultCode == Activity.RESULT_OK) {
+                cameraAction.handleBigCameraPhoto(this);
+                loadListPlaceMarked();
+            }
+            else if(resultCode == RESULT_CANCELED) {
+                cameraAction.deleteFile();
+            }
         }
-        else if (requestCode == PLACE_AUTOCOMPLETE_REQUEST_CODE) {
+        else
+        if (requestCode == PLACE_AUTOCOMPLETE_REQUEST_CODE) {
             if (resultCode == RESULT_OK) {
                 Place place = PlaceAutocomplete.getPlace(this, data);
                 moveCameraToPlace(place);
@@ -526,7 +515,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     }
 
-    //only for camera
     public Location getLocation() {
         Location location = null;
         try {
@@ -604,98 +592,16 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private void loadPic(int id) {
         thumbnails = null;
-        thumbnails = loadImages(id);
+        thumbnails = cameraAction.loadImages(id);
     }
 
-    private Bitmap[] loadImages(int id) {
-        File path = new File(pathAlbum);
-        String[] fileNames = null;
-        if(path.exists())
-        {
-            fileNames = path.list();
-        }
-        else {//thoat
-            return null;
-        }
-        List<Bitmap> bitmaps = new ArrayList<Bitmap>();
-        for(int i = 0; i < fileNames.length; i++)
-        {
-            //Ktra id hinh == id dia diem thi add vao
-            if(fileNames[i].charAt(4)== Character.forDigit(id,10)) {
-                String fileName = pathAlbum + "/" + fileNames[i];
-
-                final BitmapFactory.Options options = new BitmapFactory.Options();
-                options.inSampleSize = 3;
-                // Decode bitmap with inSampleSize set
-                options.inJustDecodeBounds = false;
-                Bitmap mBitmap = BitmapFactory.decodeFile(fileName,options);
-                bitmaps.add(mBitmap);
-            }
-        }
-
-        //List -> []
-        Bitmap[] mang = bitmaps.toArray(new Bitmap[bitmaps.size()]);
-        return mang;
-
-    }//Camera
-
-    private void handleBigCameraPhoto() {
-
-        if (mCurrentPhotoPath != null) {
-            //setPic();
-            galleryAddPic();
-            mCurrentPhotoPath = null;
-        }
-
-    }
-
-    private void galleryAddPic() {
-        Intent mediaScanIntent = new Intent("android.intent.action.MEDIA_SCANNER_SCAN_FILE");
-        File f = new File(mCurrentPhotoPath);
-        Uri contentUri = Uri.fromFile(f);
-        mediaScanIntent.setData(contentUri);
-        this.sendBroadcast(mediaScanIntent);
-    }
-
-    private File setUpPhotoFile() throws IOException {
-
-        File f = createImageFile();
-        mCurrentPhotoPath = f.getAbsolutePath();
-
-        return f;
-    }
-
-    private File createImageFile() throws IOException {
-        //Add place to db if not
-        if(checkedPlaceDAO.getCheckedPlace(curPlace) == null)
-            checkedPlaceDAO.addCheckedPlace(curPlace,curAddr);
-        int id = checkedPlaceDAO.getCheckedPlace(curPlace).getId();
-        // Create an image file name
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        String imageFileName = JPEG_FILE_PREFIX + id +"_"+ timeStamp + "_";
-        //create folder
-        File albumF = new File(pathAlbum);
-        albumF.mkdirs();
-        //create file
-        File imageF = File.createTempFile(imageFileName, JPEG_FILE_SUFFIX, albumF);
-        return imageF;
-    }
-
+    //Camera
     private void cameraAct(){
         Intent cameraIntent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
-        File f = null;
-
-        try {
-            f = setUpPhotoFile();
-            mCurrentPhotoPath = f.getAbsolutePath();
-            cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
-        } catch (IOException e) {
-            e.printStackTrace();
-            f = null;
-            mCurrentPhotoPath = null;
-        }
+        cameraAction = new CameraAction(curPlace,curAddr,checkedPlaceDAO);
+        cameraAction.makeFile(cameraIntent);
         startActivityForResult(cameraIntent, CAMERA_REQUEST);
-    }//Camera
+    }
 
 
     public void loadListPlaceMarked() {
