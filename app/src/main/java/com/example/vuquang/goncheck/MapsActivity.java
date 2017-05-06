@@ -2,9 +2,13 @@ package com.example.vuquang.goncheck;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.Dialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.location.Address;
 import android.location.Geocoder;
@@ -14,7 +18,10 @@ import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.provider.MediaStore;
+import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.view.MenuItemCompat;
 import android.support.v7.app.ActionBar;
@@ -52,6 +59,7 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
 
 import java.io.File;
 import java.io.IOException;
@@ -78,6 +86,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private static final String JPEG_FILE_PREFIX = "IMG_";
     private static final String JPEG_FILE_SUFFIX = ".jpg";
 
+    public static final int LOCATION_UPDATE_MIN_DISTANCE = 10;
+    public static final int LOCATION_UPDATE_MIN_TIME = 5000;
+
     //Spinner items
     List<String> itemsShort;
     List<String> itemsLong;
@@ -85,8 +96,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     //Get map
     private GoogleMap mMap;
     LocationManager locationManager;
-    public static final int LOCATION_UPDATE_MIN_DISTANCE = 10;
-    public static final int LOCATION_UPDATE_MIN_TIME = 5000;
 
     //Get addr from Latit and Longit
     Geocoder geocoder;
@@ -98,7 +107,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     //Manage Db
     CheckedPlaceDAO checkedPlaceDAO;
 
-//    Button btnLocation;
     private SlidingUpPanelLayout mLayout;
     ViewGroup scrollViewgroup;
     TextView textNamePlace;
@@ -109,7 +117,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     //Direction
     private LatLng origin;
     private LatLng destination;
+    Polyline polyline;
 
+    private Handler progressBarHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            Object returnedValue = msg. obj;
+
+            if(returnedValue instanceof CheckedPlace) {
+                markLocation((CheckedPlace)returnedValue);
+            }
+        }
+    };
 
     private final LocationListener locationListener = new LocationListener() {
         public void onLocationChanged(Location location) {
@@ -192,6 +211,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private void loadSlidePanel(){
         if (thumbnails != null) {
             scrollViewgroup.removeAllViews();
+
+            //Set big view for first image
+            if(thumbnails[0] != null)
+            showLargeImage(0);
+
             for (int i = 0; i < thumbnails.length; i++) {
                 //create single frames [icon] using XML inflater
                 final View singleFrame = getLayoutInflater().inflate(
@@ -213,10 +237,49 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     //display a high-quality version of the image selected using thumbnails
-    protected void showLargeImage(int frameId) {
+    protected void showLargeImage(final int frameId) {
         Drawable selectedLargeImage = new BitmapDrawable(getResources(),
                 Bitmap.createScaledBitmap(thumbnails[frameId], B_WIDTH, B_HEIGHT, false));
         imageSelected.setBackground(selectedLargeImage);
+        imageSelected.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                showImageOnDialog(frameId);
+                return false;
+            }
+        });
+    }
+
+    public void showImageOnDialog(int id) {
+        Dialog builder = new Dialog(this);
+        builder.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        builder.getWindow().setBackgroundDrawable(
+                new ColorDrawable(android.graphics.Color.TRANSPARENT));
+        builder.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface dialogInterface) {
+                //nothing;
+            }
+        });
+
+        Bitmap image = thumbnails[id];
+        ImageView imageView = new ImageView(this);
+
+        if(image.getHeight() < image.getWidth()) {
+            Matrix matrix = new Matrix();
+            matrix.postRotate(90f);
+            image = Bitmap.createBitmap(image , 0, 0,
+                    image.getWidth(),
+                    image.getHeight(),
+                    matrix,
+                    true);
+        }
+
+        imageView.setImageBitmap(image);
+        builder.addContentView(imageView, new RelativeLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        builder.show();
     }
 
 
@@ -267,16 +330,17 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 }
                 marker.showInfoWindow();
                 //set des to marker
-                destination =marker.getPosition();
+                destination = marker.getPosition();
                 return true;
             }
         });
         getLocation();
+        loadListPlaceMarked();
     }
 
     //Load items
     private void loadItemsForSpinner(Spinner spinner){
-        List<CheckedPlace> listPlace = loadListPlace();
+        List<CheckedPlace> listPlace = checkedPlaceDAO.getAllCheckedPlace();
         itemsLong = new ArrayList<>();
         itemsShort = new ArrayList<>();
         for(CheckedPlace place:listPlace) {
@@ -350,9 +414,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == CAMERA_REQUEST && resultCode == Activity.RESULT_OK) {
             handleBigCameraPhoto();
-            loadListPlace();
-            loadPic(checkedPlaceDAO.getCheckedPlace(curPlace).getId());
-            textNamePlace.setText(curPlace.toString());
+            loadListPlaceMarked();
+//            loadPic(checkedPlaceDAO.getCheckedPlace(curPlace).getId());
+//            textNamePlace.setText(curPlace.toString());
         }
         else if (requestCode == PLACE_AUTOCOMPLETE_REQUEST_CODE) {
             if (resultCode == RESULT_OK) {
@@ -453,7 +517,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (location != null) {
             //Get addr
             Address addr = getAddrCurrentLocation(location.getLatitude(),location.getLongitude());
-
+            if(addr == null) return;
             String name = addr.getAddressLine(0);
             moveCameraTo(location.getLatitude(),location.getLongitude());
             curPlace = name;
@@ -541,7 +605,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private void loadPic(int id) {
         thumbnails = null;
         thumbnails = loadImages(id);
-        loadSlidePanel();
     }
 
     private Bitmap[] loadImages(int id) {
@@ -559,11 +622,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         {
             //Ktra id hinh == id dia diem thi add vao
             if(fileNames[i].charAt(4)== Character.forDigit(id,10)) {
-                Bitmap mBitmap = BitmapFactory.decodeFile(pathAlbum + "/" + fileNames[i]);
+                String fileName = pathAlbum + "/" + fileNames[i];
+
+                final BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inSampleSize = 3;
+                // Decode bitmap with inSampleSize set
+                options.inJustDecodeBounds = false;
+                Bitmap mBitmap = BitmapFactory.decodeFile(fileName,options);
                 bitmaps.add(mBitmap);
             }
         }
 
+        //List -> []
         Bitmap[] mang = bitmaps.toArray(new Bitmap[bitmaps.size()]);
         return mang;
 
@@ -628,55 +698,62 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }//Camera
 
 
-    public List<CheckedPlace> loadListPlace() {
+    public void loadListPlaceMarked() {
         //load dbs
-        List<CheckedPlace> list = checkedPlaceDAO.getAllCheckedPlace();
-        for(CheckedPlace checkedPlace:list) {
-            //Toast.makeText(this,checkedPlace.getId()+":"+checkedPlace.getPlaceAddr(),Toast.LENGTH_SHORT).show();
-            markLocation(checkedPlace);
-        }
-        return list;
+        final List<CheckedPlace> list = checkedPlaceDAO.getAllCheckedPlace();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+
+                for(CheckedPlace checkedPlace:list) {
+                    progressBarHandler.sendMessage(progressBarHandler.obtainMessage(
+                            1,
+                            checkedPlace));
+                    //markLocation(checkedPlace);
+                }
+            }
+        }).start();
     }
 
     //Direction
     public void requestDirection() {
-        mMap.clear();
-        Toast.makeText(this, "Direction Requesting...", Toast.LENGTH_SHORT).show();
+        if(polyline != null)
+            polyline.remove();
         Location location = mMap.getMyLocation();
         origin = new LatLng(location.getLatitude(),location.getLongitude());
         if(origin == null) {
-            Toast.makeText(this,"There is no current place",Toast.LENGTH_SHORT);
+            Snackbar.make(textNamePlace,"There is no current place",Toast.LENGTH_SHORT);
         }
         else
         if(destination == null) {
-            Toast.makeText(this,"There is no destination place",Toast.LENGTH_SHORT);
+            Snackbar.make(textNamePlace,"There is no destination place",Toast.LENGTH_SHORT);
         }
         else {
+            Snackbar.make(textNamePlace,"Direction Requesting...", Snackbar.LENGTH_SHORT).show();
             GoogleDirection.withServerKey(getString(R.string.server_key))
                     .from(origin)
                     .to(destination)
                     .transportMode(TransportMode.DRIVING)
                     .execute(this);
+
         }
-        loadListPlace();
     }
 
     @Override
     public void onDirectionSuccess(Direction direction, String rawBody) {
-        Toast.makeText(this, "Success with status : " + direction.getStatus(), Toast.LENGTH_SHORT).show();
+        Snackbar.make(textNamePlace,"Success with status : " + direction.getStatus(), Snackbar.LENGTH_SHORT).show();
         if (direction.isOK()) {
-            //mMap.addMarker(new MarkerOptions().position(origin));
-            mMap.addMarker(new MarkerOptions().position(destination));
-
+//            mMap.addMarker(new MarkerOptions().position(destination)
+//                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW))
+//            );
             ArrayList<LatLng> directionPositionList = direction.getRouteList().get(0).getLegList().get(0).getDirectionPoint();
-            mMap.addPolyline(DirectionConverter.createPolyline(this, directionPositionList, 5, Color.RED));
-
+            polyline = mMap.addPolyline(DirectionConverter.createPolyline(this, directionPositionList, 5, Color.RED));
         }
     }
 
     @Override
     public void onDirectionFailure(Throwable t) {
-        Toast.makeText(this, t.getMessage(), Toast.LENGTH_SHORT).show();
+        Snackbar.make(textNamePlace,t.getMessage(), Snackbar.LENGTH_SHORT).show();
     }
 
 }

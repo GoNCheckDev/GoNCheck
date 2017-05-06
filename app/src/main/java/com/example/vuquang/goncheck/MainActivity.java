@@ -1,8 +1,11 @@
 package com.example.vuquang.goncheck;
 
 
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Typeface;
+import android.location.LocationManager;
+import android.provider.Settings;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
@@ -42,7 +45,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      */
     @Override
     public void onClick(View v) {
-        googleMapAct();
+        String locationProviders = Settings.Secure.getString(getContentResolver(), Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
+        if (locationProviders == null || locationProviders.equals("")) {
+            Toast.makeText(this,"Please turn on GPS and network",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        else
+            googleMapAct();
 
     }
 
