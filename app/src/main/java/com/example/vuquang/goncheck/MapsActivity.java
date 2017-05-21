@@ -3,6 +3,7 @@ package com.example.vuquang.goncheck;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -14,13 +15,12 @@ import android.location.Geocoder;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.view.MenuItemCompat;
-import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.graphics.*;
@@ -65,7 +65,8 @@ import java.util.Locale;
 import io.realm.Realm;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,DirectionCallback{
-    private static final String TAG = "DemoActivity";
+    private static final String TAG = "GoNCheck";
+
     private static final int PLACE_AUTOCOMPLETE_REQUEST_CODE = 1889;
     private static final int CAMERA_REQUEST = 1888;
     private static final int S_WIDTH = 120;
@@ -106,16 +107,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private LatLng destination;
     Polyline polyline;
 
-    private Handler progressBarHandler = new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            Object returnedValue = msg. obj;
-            if(returnedValue instanceof CheckedPlace) {
-                markLocation((CheckedPlace)returnedValue);
-            }
-        }
-    };
-
     private final LocationListener locationListener = new LocationListener() {
         public void onLocationChanged(Location location) {
             locationManager.removeUpdates(locationListener);
@@ -132,8 +123,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        this.requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_maps);
-        getSupportActionBar().setDisplayOptions(0, ActionBar.DISPLAY_SHOW_TITLE);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
@@ -279,6 +270,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
      */
     @Override
     public void onMapReady(GoogleMap googleMap) {
+        Snackbar.make(textNamePlace,"Loading map...", Snackbar.LENGTH_SHORT).show();
         mMap = googleMap;
         int googlePlayStatus = GooglePlayServicesUtil.isGooglePlayServicesAvailable(this);
         if (googlePlayStatus != ConnectionResult.SUCCESS) {
@@ -319,8 +311,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 return true;
             }
         });
-        getLocation();
         loadListPlaceMarked();
+        getLocation();
     }
 
     //Load items
@@ -368,7 +360,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 // user clicked a menu-item from ActionBar
         switch (item.getItemId()){
             case R.id.action_camera: {
-                getLocation();
                 cameraAct();
                 return true;
             }//Camera
@@ -515,7 +506,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     }
 
+    public boolean checkStatus() {
+        ConnectivityManager cm =
+                (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo netInfo = cm.getActiveNetworkInfo();
+        return netInfo != null && netInfo.isConnected();
+    }
+
     public Location getLocation() {
+        Snackbar.make(textNamePlace,"Getting location...", Snackbar.LENGTH_SHORT).show();
         Location location = null;
         try {
             locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
@@ -547,6 +546,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                         if (location != null) {
                             updateMyCurrentLoc(location);
                             origin = new LatLng(location.getLatitude(),location.getLongitude());
+                            return location;
                         }
                     }
                 }
@@ -565,13 +565,19 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                             if (location != null) {
                                 updateMyCurrentLoc(location);
                                 origin = new LatLng(location.getLatitude(),location.getLongitude());
+                                return location;
                             }
                         }
                     }
                 }
+                if(location == null) {
+                    Snackbar.make(textNamePlace,"Location cannot be found", Snackbar.LENGTH_SHORT).show();
+
+                }
             }
 
         } catch (Exception e) {
+            Snackbar.make(textNamePlace,"Location cannot be found", Snackbar.LENGTH_SHORT).show();
             e.printStackTrace();
         }
         return location;
@@ -590,13 +596,17 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
-    private void loadPic(int id) {
+    private void loadPic(final int idAddr) {
         thumbnails = null;
-        thumbnails = cameraAction.loadImages(id);
+        thumbnails = cameraAction.loadImages(idAddr);
     }
 
     //Camera
     private void cameraAct(){
+        if(!checkStatus()) {
+            return;
+        }
+        getLocation();
         Intent cameraIntent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
         cameraAction = new CameraAction(curPlace,curAddr,checkedPlaceDAO);
         cameraAction.makeFile(cameraIntent);
@@ -607,22 +617,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     public void loadListPlaceMarked() {
         //load dbs
         final List<CheckedPlace> list = checkedPlaceDAO.getAllCheckedPlace();
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-
-                for(CheckedPlace checkedPlace:list) {
-                    progressBarHandler.sendMessage(progressBarHandler.obtainMessage(
-                            1,
-                            checkedPlace));
-                    //markLocation(checkedPlace);
+                for(final CheckedPlace checkedPlace:list) {
+                    markLocation(checkedPlace);
                 }
-            }
-        }).start();
+
     }
 
     //Direction
     public void requestDirection() {
+
+        if(!checkStatus()) {
+            return;
+        }
         if(polyline != null)
             polyline.remove();
         Location location = mMap.getMyLocation();
@@ -659,7 +665,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onDirectionFailure(Throwable t) {
-        Snackbar.make(textNamePlace,t.getMessage(), Snackbar.LENGTH_SHORT).show();
+        Snackbar.make(textNamePlace,"Direction cannot be found", Snackbar.LENGTH_SHORT).show();
     }
 
 }

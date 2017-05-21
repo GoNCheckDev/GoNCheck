@@ -1,23 +1,15 @@
 package com.example.vuquang.goncheck;
 
-
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Typeface;
-import android.location.LocationManager;
-import android.provider.Settings;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
 import android.widget.*;
-
-import com.example.vuquang.goncheck.DAO.CheckedPlaceDAO;
-import com.example.vuquang.goncheck.model.CheckedPlace;
-import com.google.android.gms.location.places.Place;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener{
     TextView tx;
@@ -45,14 +37,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      */
     @Override
     public void onClick(View v) {
-        String locationProviders = Settings.Secure.getString(getContentResolver(), Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
-        if (locationProviders == null || locationProviders.equals("")) {
-            Toast.makeText(this,"Please turn on GPS and network",Toast.LENGTH_SHORT).show();
+        if (!isOnline()) {
+            Toast.makeText(this,"Please turn on network",Toast.LENGTH_SHORT).show();
             return;
         }
         else
             googleMapAct();
 
+    }
+
+    public boolean isOnline() {
+        ConnectivityManager cm =
+                (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo netInfo = cm.getActiveNetworkInfo();
+        return netInfo != null && netInfo.isConnected();
     }
 
 

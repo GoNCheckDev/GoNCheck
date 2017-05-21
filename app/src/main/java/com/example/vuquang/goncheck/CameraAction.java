@@ -113,7 +113,7 @@ public class CameraAction {
         {
             //Ktra id hinh == id dia diem thi add vao
             if(fileNames[i].charAt(4)== Character.forDigit(id,10)) {
-                String fileName = pathAlbum + "/" + fileNames[i];
+                final String fileName = pathAlbum + "/" + fileNames[i];
 
                 final BitmapFactory.Options options = new BitmapFactory.Options();
                 options.inSampleSize = 3;
